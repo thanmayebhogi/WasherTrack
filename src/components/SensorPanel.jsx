@@ -3,11 +3,13 @@ import { useWash } from '../context/washStore.js'
 import { formatCountdown } from '../utils/time.js'
 
 export default function SensorPanel({ machine }) {
-  const { setMotion, setWifi, advanceClock, bookings, settings, now } = useWash()
+  const { setMotion, setWifi, advanceClock, bookings, settings, now, backendOnline, apiBase } = useWash()
   const dueBooking = bookings.find(
     (b) => b.id === machine.reservedFor && b.status === 'due',
   )
   const graceLeft = dueBooking ? dueBooking.startAt + settings.graceMinutes * 60000 - now : null
+  const backendLabel =
+    backendOnline === null ? 'Connecting to backend…' : backendOnline ? 'Live data from backend' : 'Backend offline'
 
   return (
     <section className="card sensor-panel">
@@ -15,7 +17,7 @@ export default function SensorPanel({ machine }) {
         <h3>
           <Radio size={17} /> Sensor &amp; connectivity
         </h3>
-        <span className="card__hint">Frontend simulation</span>
+        <span className="card__hint">{backendLabel}</span>
       </header>
 
       <div className="sensor-grid">
@@ -68,10 +70,10 @@ export default function SensorPanel({ machine }) {
 
       <div className="sensor-actions">
         <button type="button" className="btn btn--primary btn--sm" onClick={() => setMotion(machine.id, 'detected')}>
-          <ScanFace size={15} /> Simulate Motion
+          <ScanFace size={15} /> Test: send &quot;detected&quot;
         </button>
         <button type="button" className="btn btn--outline btn--sm" onClick={() => setMotion(machine.id, 'none')}>
-          Simulate No Motion
+          Test: send &quot;none&quot;
         </button>
         <button type="button" className="btn btn--outline btn--sm" onClick={() => setWifi(machine.id, false)}>
           <WifiOff size={15} /> Wi-Fi Disconnect
@@ -80,6 +82,11 @@ export default function SensorPanel({ machine }) {
           <Wifi size={15} /> Wi-Fi Connect
         </button>
       </div>
+
+      <p className="card__foot-note">
+        <Radio size={14} /> Dev test button: sends a real POST to {apiBase}/api/sensor/motion for {machine.id}, exactly like the
+        ESP32 does.
+      </p>
 
       <div className="sensor-demo">
         <FastForward size={15} />

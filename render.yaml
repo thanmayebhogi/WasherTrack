@@ -1,0 +1,32 @@
+# Render Blueprint — creates BOTH services from this repo.
+# Render Dashboard -> New -> Blueprint -> select this repository.
+#
+# If you rename a service, update the URL in the other service's env var
+# (they must point at each other).
+
+services:
+  # ---------- Express API (called by the React app and the ESP32) ----------
+  - type: web
+    name: washertrack-api
+    runtime: node
+    plan: free # on a paid workspace use e.g. 0.5c-512mb to avoid cold starts
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: CORS_ORIGIN
+        value: https://washertrack-frontend.onrender.com
+
+  # ---------- React frontend (static files built into dist/) ----------
+  - type: web
+    name: washertrack-frontend
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://washertrack-api.onrender.com
+    routes:
+      # SPA fallback so refreshing /dashboard does not 404
+      - type: rewrite
+        source: /*
+        destination: /index.html

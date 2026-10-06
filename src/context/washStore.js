@@ -382,6 +382,23 @@ function applyAction(state, action) {
         ),
       }
 
+    // Merges the sensor status fetched from the backend (GET /api/machines).
+    // Returns the same object when nothing changed so the 3s poll causes no re-render.
+    case 'SYNC_MACHINES': {
+      let changed = false
+      const machines = state.machines.map((m) => {
+        const remote = action.machines.find((r) => r.id === m.id)
+        if (!remote) return m
+        const motion = remote.motion === 'detected' ? 'detected' : 'none'
+        const parsed = remote.lastMotionAt ? Date.parse(remote.lastMotionAt) : NaN
+        const lastMotionAt = Number.isNaN(parsed) ? m.lastMotionAt : parsed
+        if (m.motion === motion && m.lastMotionAt === lastMotionAt) return m
+        changed = true
+        return { ...m, motion, lastMotionAt }
+      })
+      return changed ? { ...state, machines } : state
+    }
+
     case 'SET_WIFI':
       return {
         ...state,

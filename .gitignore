@@ -10,10 +10,18 @@ lerna-debug.log*
 node_modules/
 dist/
 dist-ssr/
+build/
 *.local
 
-# Environment variables
+# Environment variables / secrets
 .env
+.env.*
+!.env.example
+
+# ESP32 - local Wi-Fi credentials
+secrets.h
+*.pem
+*.key
 
 # Editor directories and files
 .vscode/*

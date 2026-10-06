@@ -11,6 +11,8 @@ import {
   washReducer,
   WashContext,
 } from './washStore.js'
+import { fetchMachines, sendMotion, API_BASE } from '../api.js'
+import { MACHINE_META } from '../data/seed.js'
 import { minutesOfDay, uid } from '../utils/time.js'
 
 const initialsOf = (name) =>
@@ -47,6 +49,52 @@ export function WashProvider({ children }) {
       setNow(Date.now())
     }, 1000)
     return () => clearInterval(id)
+  }, [])
+
+  /* -------------------------------------------------- backend polling (real ESP32 sensors) */
+  const [backendOnline, setBackendOnline] = useState(null)
+  const syncedMotion = useRef(null)
+  const toastRef = useRef(toast)
+
+  useEffect(() => {
+    toastRef.current = toast
+  }, [toast])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const sync = async () => {
+      try {
+        const remoteMachines = await fetchMachines()
+        if (cancelled || !Array.isArray(remoteMachines)) return
+        setBackendOnline(true)
+
+        const previous = syncedMotion.current
+        if (previous) {
+          remoteMachines.forEach((remote) => {
+            if (previous.get(remote.id) === remote.motion) return
+            const meta = MACHINE_META.find((m) => m.id === remote.id)
+            const label = meta ? meta.name : remote.id
+            if (remote.motion === 'detected') {
+              toastRef.current.success('Motion detected', `PIR sensor on ${label} reports movement.`)
+            } else {
+              toastRef.current.info('No motion', `${label} sensor is idle.`)
+            }
+          })
+        }
+        syncedMotion.current = new Map(remoteMachines.map((m) => [m.id, m.motion]))
+        dispatch({ type: 'SYNC_MACHINES', machines: remoteMachines })
+      } catch {
+        if (!cancelled) setBackendOnline(false)
+      }
+    }
+
+    sync()
+    const id = setInterval(sync, 3000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
   }, [])
 
   /* -------------------------------------------------- new notifications become toasts */
@@ -192,13 +240,22 @@ export function WashProvider({ children }) {
   )
 
   const setMotion = useCallback(
-    (machineId, value) => {
-      dispatch({ type: 'SET_MOTION', machineId, value })
+    async (machineId, value) => {
       const machine = getMachine(state, machineId)
-      if (value === 'detected') {
-        toast.success('Motion detected', `PIR sensor on ${machine ? machine.name : 'machine'} reports movement.`)
-      } else {
-        toast.info('No motion', `${machine ? machine.name : 'machine'} sensor is idle.`)
+      const label = machine ? machine.name : 'machine'
+      try {
+        await sendMotion(machineId, value)
+        if (syncedMotion.current) syncedMotion.current.set(machineId, value)
+        dispatch({ type: 'SET_MOTION', machineId, value })
+        if (value === 'detected') {
+          toast.success('Motion detected', `PIR sensor on ${label} reports movement.`)
+        } else {
+          toast.info('No motion', `${label} sensor is idle.`)
+        }
+        return true
+      } catch (err) {
+        toast.error('Backend unreachable', `${label}: ${err.message}. API: ${API_BASE || '/api'}`)
+        return false
       }
     },
     [state, toast],
@@ -341,6 +398,8 @@ export function WashProvider({ children }) {
     () => ({
       ...state,
       now,
+      backendOnline,
+      apiBase: API_BASE,
       currentUser,
       myBookings,
       activeBookings,
@@ -376,6 +435,7 @@ export function WashProvider({ children }) {
     [
       state,
       now,
+      backendOnline,
       currentUser,
       myBookings,
       activeBookings,
